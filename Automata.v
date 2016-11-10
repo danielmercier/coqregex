@@ -40,7 +40,7 @@ Record nfa := mkNfa {
   fin : Ensemble S
 }.
 
-Inductive accepts_from (nfa: nfa) (s: S) : list A -> Prop :=
+(*Inductive accepts_from (nfa: nfa) (s: S) : list A -> Prop :=
 | accepts_nil : In _ (fin nfa) s -> accepts_from nfa s []
 | accepts_cons : forall e h q, In _ (next nfa h s) e -> accepts_from nfa e q -> accepts_from nfa s (h::q).
 
@@ -50,7 +50,18 @@ Fixpoint nfa_accepts (nfa: nfa) (w: list A) (s: S): Prop :=
   match w with
   | [] => fin nfa s
   | a::wq => exists y, (next nfa a s y) /\ nfa_accepts nfa wq y
-  end.
+  end.*)
+
+(*Les couples (p, q)*)
+Inductive step nfa a : Ensemble (S * S) :=
+  | In_step : forall p q, In _ (next nfa a p) q -> step nfa a (p, q).
+
+Inductive steps nfa : list A -> Ensemble (S * S) :=
+  | In_steps_nil : forall s, steps nfa [] (s, s)
+  | In_steps_cons : forall h q sa sb sc, step nfa h (sa, sb) -> steps nfa q (sb, sc) -> steps nfa (h::q) (sa, sc).
+
+Definition accepts (nfa: nfa) (w: list A): Prop :=
+  {k: S | steps nfa }
 
 (*Fixpoint delta (nfa: nfa) (w: list A) (s: S): set S :=
   match w with
