@@ -16,12 +16,17 @@ Definition nae := nfa (option A) S.
 
 Definition eps (nae : nae) := step nae None.
 
+(*Cloture reflexive transitive*)
+Inductive rtrancl (T: Type) (ens : Ensemble (T * T)) : Ensemble (T * T) :=
+  | rtrancl_refl : forall s, rtrancl ens (s, s)
+  | rtrancl_intro_rtrancl : forall a b c, rtrancl ens (a, b) -> In _ ens (b, c) -> rtrancl ens (a, c).
+
 (*On utilise steps car mieux pour raisonner après, blocage avec l'autre version de accepts_eps_from*)
 Inductive steps_nae nae : list A -> Ensemble (S * S) :=
-  | In_step_nil : forall p q, eps nae (p, q) -> steps_nae nae [] (p, q)
-  | In_step_cons :
+  | In_steps_nil : forall p q, rtrancl (eps nae) (p, q) -> steps_nae nae [] (p, q)
+  | In_steps_cons :
       forall h q sa sb sc sd,
-        eps nae (sa, sb) ->
+        rtrancl (eps nae) (sa, sb) ->
         step nae (Some h) (sb, sc) ->
         steps_nae nae q (sc, sd) ->
           steps_nae nae (h::q) (sa, sd).
@@ -31,7 +36,8 @@ Inductive accepts_eps_from (nae: nae) (s: S) : list A -> Prop :=
   | acc_cons : forall e h q, In _ (next nae (Some h) s) e -> accepts_eps_from nae e q -> accepts_eps_from nae s (h::q)
   | acc_none : forall e w, In _ (next nae None s) e -> accepts_eps_from nae e w -> accepts_eps_from nae s w.
 
-Definition accepts_eps nae : list A -> Prop := accepts_eps_from nae (start nae).
+Definition accepts_eps nae w : Prop :=
+  exists k, In _ (fin nae) k /\ In _ (steps_nae nae w) (start nae, k).
 
 End Nae.
 
@@ -62,8 +68,8 @@ Inductive prepend_list_set (A: Type) (b: A) (ens: Ensemble (list A)) : Ensemble 
 Inductive alt_next (nae1 nae2: bitsNAe): option A -> list bool -> Ensemble (list bool) :=
   | nextNL : alt_next nae1 nae2 None [] (true::start nae1)
   | nextNR : alt_next nae1 nae2 None [] (false::start nae2)
-  | nextL : forall a q s, In _ (next nae1 a s) q -> alt_next nae1 nae2 a (true::q) s
-  | nextR : forall a q s, In _ (next nae2 a s) q -> alt_next nae1 nae2 a (false::q) s.
+  | nextL : forall a q s, In _ (next nae1 a q) s -> alt_next nae1 nae2 a (true::q) (true::s)
+  | nextR : forall a q s, In _ (next nae2 a q) s -> alt_next nae1 nae2 a (false::q) (true::s).
 
 Inductive alt_fin (nae1 nae2: bitsNAe): Ensemble (list bool) :=
   | finL : forall s, In _ (fin nae1) s -> alt_fin nae1 nae2 (true::s)
@@ -121,17 +127,108 @@ Definition rexp1 := Atom 1.
 Definition nfae1 := atom 1.
 
 Lemma acc_nfae1 : accepts_eps nfae1 [1].
-  apply acc_cons with (e := [false]).
+  unfold accepts_eps.
+  exists ([false]).
+  split.
+  apply In_singleton.
+  unfold In.
+  Print steps_nae.
+  simpl.
+  apply In_steps_cons with (sb := [true]) (sc := [false]).
+  apply rtrancl_refl.
+  apply In_step.
   compute.
   apply nextA.
-  apply acc_nil.
-  compute.
-  apply In_singleton.
+  apply In_steps_nil.
+  apply rtrancl_refl.
 Qed.
 
 Definition nfae2 := alt (atom 1) (atom 2).
 
 Variable A: Type.
+
+Goal forall nae: bitsNAe A, accepts_eps nae [] ->
+        exists s: list bool, In _ (fin nae) s -> rtrancl (eps nae) (start nae, s).
+
+  intros nae H.
+  unfold accepts_eps in H.
+  destruct H.
+  destruct H as (H, H').
+  exists x.
+  intros _.
+  inversion H'.
+  assumption.
+Qed.
+
+Lemma step_imp_next:
+  forall (na : bitsNAe A) (a : option A) (p q : list bool),
+    In _ (step na a) (p, q) -> In _ (next na a p) q.
+Proof.
+  intros na a p q H.
+  inversion_clear H.
+  assumption.
+Qed.
+
+(*Bon ça prouve le goal suivant mais ça à l'air faux quand meme*)
+Lemma rtrancl_imp_step :
+  forall (na : bitsNAe A) (a : option A) (p q : list bool),
+    rtrancl (step na a) (p, q) -> step na a (p, q).
+Admitted.
+
+Goal forall nae1 nae2: bitsNAe A, accepts_eps nae1 [] -> accepts_eps (alt nae1 nae2) [].
+  intros nae1 nae2 H.
+  inversion H as (x, H').
+  destruct H' as (H', H'').
+  inversion_clear H''.
+  unfold accepts_eps.
+  exists (true::x).
+  split; simpl; try apply finL; try assumption.
+  apply In_steps_nil.
+  apply rtrancl_intro_rtrancl with (b := true::start nae1); try apply rtrancl_refl.
+  apply rtrancl_intro_rtrancl with (b := []); try apply rtrancl_refl.
+  apply In_step.
+  apply nextNL.
+  unfold eps.
+  apply In_step.
+  apply nextL.
+  apply step_imp_next.
+  apply rtrancl_imp_step.
+  assumption.
+Qed.
+
+Goal forall (w : list A) (nae1 nae2 : bitsNAe A),
+        accepts_eps nae1 w -> accepts_eps (alt nae1 nae2) w.
+  intros w nae1 nae2.
+  induction 1.
+  destruct H as (H, H').
+  unfold accepts_eps.
+  exists (true::x).
+  split.
+  *
+    simpl.
+    apply finL.
+    assumption.
+  *
+  induction w.
+  **
+    apply In_steps_nil.
+    simpl.
+    Print rtrancl.
+    apply rtrancl_intro_rtrancl with (b := true::start nae1).
+    ***
+      apply rtrancl_intro_rtrancl with (b := []); try apply rtrancl_refl.
+      unfold eps.
+      apply In_step.
+      simpl.
+      unfold In.
+      Print alt_next.
+      apply nextNL.
+    ***
+    unfold eps.
+    apply In_step.
+    simpl.
+    Print alt_next.
+Qed.
 
 (*Blocage....*)
 Goal forall (w : list A) (nae1 nae2 : bitsNAe A),
