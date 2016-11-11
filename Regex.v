@@ -128,7 +128,7 @@ Goal LB [1] /\ LB [1; 2].
   exists [2].
   split.
   reflexivity.
-  split; unfold langAtom; reflexivity.
+  split; reflexivity.
 Qed.
 
 End Test.
