@@ -55,13 +55,15 @@ Fixpoint nfa_accepts (nfa: nfa) (w: list A) (s: S): Prop :=
 (*Les couples (p, q)*)
 Inductive step nfa a : Ensemble (S * S) :=
   | In_step : forall p q, In _ (next nfa a p) q -> step nfa a (p, q).
+Hint Resolve step.
 
 Inductive steps nfa : list A -> Ensemble (S * S) :=
   | In_steps_nil : forall s, steps nfa [] (s, s)
   | In_steps_cons : forall h q sa sb sc, step nfa h (sa, sb) -> steps nfa q (sb, sc) -> steps nfa (h::q) (sa, sc).
+Hint Resolve steps.
 
-Definition accepts (nfa: nfa) (w: list A): Prop :=
-  {k: S | steps nfa }
+Definition accepts (nfa: nfa) (w: list A) :=
+  exists k: S, In _ (fin nfa) k /\ In _ (steps nfa w) (start nfa, k).
 
 (*Fixpoint delta (nfa: nfa) (w: list A) (s: S): set S :=
   match w with
@@ -181,22 +183,29 @@ Definition nfa1 :=
 
 Goal accepts nfa1 [0].
   unfold accepts.
-  apply accepts_cons with (e := 1).
+  exists 1.
+  split.
+  apply In_singleton.
+  unfold In.
+  apply In_steps_cons with (sb := 1).
+  apply In_step.
   simpl.
   apply next001.
-  apply accepts_nil.
-  apply In_singleton.
+  apply In_steps_nil.
 Qed.
 
 Goal accepts nfa1 [0; 1].
   unfold accepts.
-  apply accepts_cons with (e := 1).
-  simpl.
-  apply next001.
-  apply accepts_cons with (e := 1).
-  simpl.
-  apply next111.
-  apply accepts_nil.
+  exists 1.
+  split.
   apply In_singleton.
+  apply In_steps_cons with (sb := 1).
+  apply In_step.
+  apply next001.
+  apply In_steps_cons with (sb := 1).
+  apply In_step.
+  apply next111.
+  apply In_steps_nil.
 Qed.
+
 End Test.
