@@ -18,8 +18,9 @@ Definition eps (nae : nae) := step nae None.
 
 (*Cloture reflexive transitive*)
 Inductive rtrancl (T: Type) (ens : Ensemble (T * T)) : Ensemble (T * T) :=
+  | rtrancl_base : forall a b, In _ ens (a, b) -> rtrancl ens (a, b)
   | rtrancl_refl : forall s, rtrancl ens (s, s)
-  | rtrancl_intro_rtrancl : forall a b c, rtrancl ens (a, b) -> In _ ens (b, c) -> rtrancl ens (a, c).
+  | rtrancl_trans : forall a b c, rtrancl ens (a, b) -> rtrancl ens (b, c) -> rtrancl ens (a, c).
 
 (*On utilise steps car mieux pour raisonner après, blocage avec l'autre version de accepts_eps_from*)
 Inductive steps_nae nae : list A -> Ensemble (S * S) :=
@@ -169,11 +170,68 @@ Proof.
   assumption.
 Qed.
 
-(*Bon ça prouve le goal suivant mais ça à l'air faux quand meme*)
+(*Bon ça prouve le goal suivant mais ça à l'air faux quand meme hein*)
 Lemma rtrancl_imp_step :
   forall (na : bitsNAe A) (a : option A) (p q : list bool),
     rtrancl (step na a) (p, q) -> step na a (p, q).
 Admitted.
+
+Goal forall nae1 nae2: bitsNAe A, accepts_eps nae1 [] -> accepts_eps (alt nae1 nae2) [].
+intros nae1 nae2 H.
+induction H.
+destruct H as (H, H').
+unfold accepts_eps.
+exists (true::x).
+split.
+apply finL.
+assumption.
+simpl.
+Print In_steps_nil.
+apply In_steps_nil.
+unfold eps.
+inversion_clear H'.
+Print rtrancl.
+apply rtrancl_trans with (b := true::start nae1).
+apply rtrancl_base.
+apply In_step.
+simpl.
+apply nextNL.
+apply rtrancl_base.
+apply In_step.
+Print nextL.
+simpl.
+apply nextL.
+induction H0.
+Admitted.
+
+Goal forall (nae1 nae2 : bitsNAe A),
+  next (alt nae1 nae2) None [] (true::start nae1).
+Proof.
+  intros nae1 nae2.
+  apply nextNL.
+Qed.
+
+Goal forall h q (nae1 nae2: bitsNAe A), ((accepts_eps nae1 q) -> accepts_eps (alt nae1 nae2) q) -> accepts_eps nae1 (h::q) -> accepts_eps (alt nae1 nae2) (h::q).
+Proof.
+  intros h q nae1 nae2 IH H.
+  induction H.
+  destruct H as (H, H').
+  exists (true::x).
+  split.
+  * apply finL.
+  assumption.
+  * simpl.
+  inversion_clear H'.
+  apply In_steps_cons with (sb := true::sb) (sc := true::sc).
+  apply rtrancl_trans with (true::start nae1).
+  apply rtrancl_base.
+  apply In_step.
+  apply nextNL.
+  apply rtrancl_base.
+  apply In_step.
+  apply nextL.
+  
+Qed.
 
 Goal forall nae1 nae2: bitsNAe A, accepts_eps nae1 [] -> accepts_eps (alt nae1 nae2) [].
   intros nae1 nae2 H.
@@ -192,7 +250,7 @@ Goal forall nae1 nae2: bitsNAe A, accepts_eps nae1 [] -> accepts_eps (alt nae1 n
   apply In_step.
   apply nextL.
   apply step_imp_next.
-  apply rtrancl_imp_step.
+  induction H0.
   assumption.
 Qed.
 

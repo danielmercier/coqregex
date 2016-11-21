@@ -1,7 +1,7 @@
 Set Implicit Arguments.
 
 Require Import List Logic Basics FunctionalExtensionality ClassicalFacts Ensembles.
-Require Import ListSet.
+Require Import ListSet Decidable.
 Import ListNotations.
 
 
@@ -34,6 +34,12 @@ Section Nfa.
 
 Variable A S: Type.
 
+(*Un automate est un triplet, avec :
+  - un  état initial
+  - une fonction de transition qui,
+    à partir d'un état et une action, donne un ensemble d'états.
+  - un ensemble d'états finaux
+*)
 Record nfa := mkNfa {
   start : S;
   next : A -> S -> Ensemble S;
@@ -52,15 +58,21 @@ Fixpoint nfa_accepts (nfa: nfa) (w: list A) (s: S): Prop :=
   | a::wq => exists y, (next nfa a s y) /\ nfa_accepts nfa wq y
   end.*)
 
+(*Definition compose (ens1 ens2 : Ensemble (S * S)) : Ensemble (S * S) :=
+  fun c =>
+    let (x, y) := c in
+    exists b, ens1 (x, b) /\ ens2 (b, y).*)
+
+Inductive compose (ens1 ens2 : Ensemble (S * S)) : Ensemble (S * S) :=
+  | In_compose : forall a b c, ens1 (a, b) -> ens2 (b, c) -> compose ens1 ens2 (a, c).
+
 (*Les couples (p, q)*)
 Inductive step nfa a : Ensemble (S * S) :=
   | In_step : forall p q, In _ (next nfa a p) q -> step nfa a (p, q).
-Hint Resolve step.
 
 Inductive steps nfa : list A -> Ensemble (S * S) :=
   | In_steps_nil : forall s, steps nfa [] (s, s)
-  | In_steps_cons : forall h q sa sb sc, step nfa h (sa, sb) -> steps nfa q (sb, sc) -> steps nfa (h::q) (sa, sc).
-Hint Resolve steps.
+  | In_steps_cons : forall h q sa sc, compose (step nfa h) (steps nfa q) (sa, sc) -> steps nfa (h::q) (sa, sc).
 
 Definition accepts (nfa: nfa) (w: list A) :=
   exists k: S, In _ (fin nfa) k /\ In _ (steps nfa w) (start nfa, k).
@@ -167,6 +179,103 @@ Goal composition (singleton (1, 2)) (singleton (2, 3)) = singleton (1, 3).
 Admitted.
 
 Goal *)
+
+Lemma simpl_step_cons : forall nfa h q, steps nfa (h::q) = compose (step nfa h) (steps nfa q).
+Proof.
+  intros nfa h q.
+  apply Extensionality_Ensembles.
+  split.
+  *intros (x, y) H.
+  inversion_clear H.
+  assumption.
+  *intros (x, y) H.
+  apply In_steps_cons.
+  assumption.
+Qed.
+
+Lemma compose_assoc :
+  forall ens1 ens2 ens3, compose (compose ens1 ens2) ens3 = compose ens1 (compose ens2 ens3).
+Proof.
+  intros ens1 ens2 ens3.
+  apply Extensionality_Ensembles.
+  split; intros (x, y) H.
+  *inversion_clear H.
+  inversion_clear H0.
+  apply In_compose with b0.
+  assumption.
+  apply In_compose with b.
+  assumption.
+  assumption.
+  *inversion_clear H.
+  inversion_clear H1.
+  apply In_compose with b0.
+  apply In_compose with b.
+  assumption.
+  assumption.
+  assumption.
+Qed.  
+
+Lemma steps_append : forall nfa v w, steps nfa (v ++ w) = compose (steps nfa v) (steps nfa w).
+Proof.
+  intros nfa v w.
+  induction v; apply Extensionality_Ensembles.
+  *split.
+    +simpl.
+    intros (x, y) H.
+    apply In_compose with x.
+    apply In_steps_nil.
+    assumption.
+    +simpl.
+    intros (x, y) H.
+    inversion_clear H.
+    (assert (b = x)).
+    inversion_clear H0.
+    trivial.
+    rewrite H in H1.
+    assumption.
+  *split.
+    +simpl.
+    intros (x, y) H.
+    rewrite simpl_step_cons.
+    rewrite simpl_step_cons in H.
+    rewrite IHv in H.
+    rewrite compose_assoc.
+    assumption.
+    +simpl.
+    intros (x, y) H.
+    rewrite simpl_step_cons.
+    rewrite simpl_step_cons in H.
+    rewrite IHv.
+    rewrite <- compose_assoc.
+    assumption.
+Qed.
+
+Lemma in_steps_append : forall nfa v w x y, steps nfa (v ++ w) (x, y) = compose (steps nfa v) (steps nfa w) (x, y).
+Proof.
+  intros nfa v w x y.
+  rewrite steps_append.
+  reflexivity.
+Qed.
+
+Axiom dec_prop : forall A B, A = B <-> (A <-> B).
+
+Lemma accepts_conv_steps :
+  forall nfa w, accepts nfa w = exists q, steps nfa w (start nfa, q) /\ fin nfa q.
+Proof.
+  intros nfa w.
+  unfold accepts.
+  apply dec_prop.
+  split.
+  *intro H.
+  destruct H.
+  exists x.
+  split; destruct H; assumption.
+  *intro H.
+  destruct H.
+  exists x.
+  split; destruct H; assumption.
+Qed.
+
 End Nfa.
 
 Section Test.

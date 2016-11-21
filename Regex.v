@@ -1,7 +1,7 @@
 Set Implicit Arguments.
 
 Require Import Arith.
-Require Import List.
+Require Import List Ensembles.
 Import ListNotations.
 
 Inductive rexp (A : Type) :=
@@ -17,15 +17,15 @@ Print List.
 
 Variable A : Type.
 Definition word := list A.
-Definition lang := word -> Prop.
+Definition lang := Ensemble word.
 
 Variable w : word.
 Variable wb we : word.
 Variable l : lang.
 
-Definition langEps (w : word) := w = nil.
-Definition lang0 (w : word) := False.
-Definition langAtom (a : A) (w : word) := w = cons a nil.
+Definition langEps : lang := Singleton _ nil.
+Definition lang0 : lang := Empty_set _.
+Definition langAtom (a : A) := Singleton _ [a].
 
 Inductive star (L : lang) : lang :=
   | NilI : star L nil
@@ -41,39 +41,30 @@ Qed.
 
 Require Import ListSet.
 
-Lemma set_eqI: forall lang1 lang2 : lang,
-  lang1 = lang2 <-> forall x, lang1 x <-> lang2 x.
-  split.
-  intro.
-  rewrite H.
-  tauto.
-  intro.
-Admitted.
-
 (* star lang0 = lang0 *)
 Lemma epsilonExists: star langEps = langEps.
-  apply set_eqI.
+  apply Extensionality_Ensembles.
   split.
-  induction 1.
+  intros v H.
+  induction H.
   reflexivity.
-  rewrite H.
-  rewrite IHstar.
-  simpl.
+  inversion_clear H.
+  inversion_clear IHstar.
   reflexivity.
-  intro H.
-  rewrite H.
+  intros v H.
+  inversion_clear H.
   apply NilI.
 Qed.
 
 Lemma epsilonAlt: star lang0 = langEps.
-  apply set_eqI.
+  apply Extensionality_Ensembles.
   split.
   induction 1.
   reflexivity.
   exfalso.
-  assumption.
-  intro H.
-  rewrite H.
+  inversion_clear H.
+  intros v H.
+  inversion_clear H.
   apply NilI.
 Qed.
 
@@ -87,12 +78,15 @@ Lemma epsilon'': star (star (star langEps)) = langEps.
   reflexivity.
 Qed.
 
+Inductive conc (l1 l2 : lang): lang :=
+  | In_conc : forall wb we, l1 wb -> l2 we -> conc l1 l2 (wb ++ we).
+
 Fixpoint L (r : rexp A): lang :=
   match r with
   | Empty _ => lang0
   | Atom a => langAtom a
-  | Alt r1 r2 => fun w => L r1 w \/ L r2 w
-  | Conc r1 r2 => fun w => exists wb we, w = wb ++ we /\ L r1 wb /\ L r2 we
+  | Alt r1 r2 => Union _ (L r1) (L r2)
+  | Conc r1 r2 => conc (L r1) (L r2)
   | Star r1 => star (L r1)
   end.
 
