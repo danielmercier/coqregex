@@ -18,7 +18,9 @@ Definition eps (nae : nae) := step nae None.
 
 (*Cloture reflexive transitive*)
 Inductive rtrancl (T: Type) (ens : Ensemble (T * T)) : Ensemble (T * T) :=
+  (*Réfléxivité*)
   | rtrancl_refl : forall s, rtrancl ens (s, s)
+  (*Transitivité*)
   | rtrancl_trans : forall a b c, rtrancl ens (a, b) -> ens (b, c) -> rtrancl ens (a, c).
 
 Lemma rtrancl_base (T: Type) : forall (ens : Ensemble (T * T)) x y, ens (x, y) -> rtrancl ens (x, y).
@@ -34,27 +36,38 @@ Lemma ens_trans_rtrancl (T: Type) : forall (ens : Ensemble (T * T)) a b c, ens (
 Proof.
   intros ens a b c.
   intros H H'.
+  inversion H'.
+  rewrite <- H2.
+  apply rtrancl_base; assumption.
+  apply rtrancl_trans with b0.
+  apply rtrancl_trans with b.
+  apply rtrancl_base; assumption.
 Admitted.
 
 Lemma rtrancl_trans_rtrancl (T: Type) :
   forall (ens : Ensemble (T * T)) a b c, rtrancl ens (a, b) -> rtrancl ens (b, c) -> rtrancl ens (a, c).
 Proof.
   intros ens a b c.
+  intros H H'.
+  inversion H.
+  assumption.
+  inversion H'.
+  rewrite <- H6.
+  assumption.
+  apply rtrancl_trans with b1.
 Admitted.
 
-(*On utilise steps car mieux pour raisonner après, blocage avec l'autre version de accepts_eps_from*)
+(*Ensemble des états atteint après list A*)
 Inductive steps_nae nae : list A -> Ensemble (S * S) :=
+  (*Si la liste est vide*)
   | In_steps_nil : forall p q, rtrancl (eps nae) (p, q) -> steps_nae nae [] (p, q)
+  (*Si la liste à un élément*)
   | In_steps_cons :
       forall h q sa sd,
         compose (compose (rtrancl (eps nae)) (step nae (Some h))) (steps_nae nae q) (sa, sd) ->
         steps_nae nae (h::q) (sa, sd).
 
-Inductive accepts_eps_from (nae: nae) (s: S) : list A -> Prop :=
-  | acc_nil : In _ (fin nae) s -> accepts_eps_from nae s []
-  | acc_cons : forall e h q, In _ (next nae (Some h) s) e -> accepts_eps_from nae e q -> accepts_eps_from nae s (h::q)
-  | acc_none : forall e w, In _ (next nae None s) e -> accepts_eps_from nae e w -> accepts_eps_from nae s w.
-
+(*Accéptation d'un automate*)
 Definition accepts_eps nae w : Prop :=
   exists k, In _ (fin nae) k /\ In _ (steps_nae nae w) (start nae, k).
 
@@ -106,7 +119,43 @@ Qed.
 Lemma epsclosure_steps: forall nae w, compose (steps_nae nae w) (rtrancl (eps nae)) = steps_nae nae w.
 Proof.
   intros nae w.
-  
+  induction w; apply Extensionality_Ensembles; split; intros (x, y) H.
+  *apply In_steps_nil.
+  inversion_clear H.
+  inversion_clear H0.
+  apply rtrancl_trans_rtrancl with b; assumption.
+  *inversion_clear H.
+  apply In_compose with x.
+  apply In_steps_nil.
+  apply rtrancl_refl.
+  assumption.
+  *apply In_steps_cons.
+  inversion_clear H.
+  inversion_clear H0.
+  inversion_clear H.
+  inversion_clear H0.
+  apply In_compose with b0.
+  apply In_compose with b1.
+  assumption.
+  assumption.
+  rewrite <- IHw.
+  apply In_compose with b; assumption.
+  *inversion_clear H.
+  inversion_clear H0.
+  inversion_clear H.
+  apply In_compose with y; try apply rtrancl_refl.
+  apply In_steps_cons.
+  apply In_compose with b.
+  apply In_compose with b0; assumption.
+  assumption.
+Qed.
+
+Lemma in_epsclosure_steps : forall nae p q r w,  steps_nae nae w (p, q) -> rtrancl (eps nae) (q, r) -> steps_nae nae w (p, r).
+Proof.
+  intros nae p q r w.
+  intros H H'.
+  rewrite <- epsclosure_steps.
+  apply In_compose with q; assumption.
 Qed.
 
 End Nae.
@@ -120,7 +169,7 @@ Definition bitsNAe := nae A (list bool).
 Definition empty_set := fun r : list bool => False.
 
 Inductive atom_next (a: A) : option A -> list bool -> Ensemble (list bool) :=
-  | nextA : atom_next a (Some a) [true] [false].
+  | Next_atomA : atom_next a (Some a) [true] [false].
 
 Definition atom (a: A): bitsNAe :=
   mkNfa
@@ -128,22 +177,25 @@ Definition atom (a: A): bitsNAe :=
     (atom_next a)
     (Singleton _ [false]).
 
+(*On défini inductivement l'ensemble des états auquels on prepend un élément b*)
 Inductive prepend_list_set (A: Type) (b: A) (ens: Ensemble (list A)) : Ensemble (list A) :=
-  | in_prep : forall q, In _ ens q -> prepend_list_set b ens (b::q).
+  (*L'élément est dans l'ensemble si*)
+  | In_prep : forall q, In _ ens q -> prepend_list_set b ens (b::q).
 
-(*Inductive alt_next (nae1 nae2: bitsNAe): option A -> list bool -> Ensemble (list bool) :=
-  | nextL : forall a q s, In _ (next nae1 a s) q -> alt_next nae1 nae2 a (true::q) s
-  | nextR : forall a q s, In _ (next nae2 a s) q -> alt_next nae1 nae2 a (false::q) s.*)
-
+(*On défini inductivement la fonction next pour alt*)
 Inductive alt_next (nae1 nae2: bitsNAe): option A -> list bool -> Ensemble (list bool) :=
-  | nextNL : alt_next nae1 nae2 None [] (true::start nae1)
-  | nextNR : alt_next nae1 nae2 None [] (false::start nae2)
-  | nextL : forall a q s, In _ (next nae1 a q) s -> alt_next nae1 nae2 a (true::q) (true::s)
-  | nextR : forall a q s, In _ (next nae2 a q) s -> alt_next nae1 nae2 a (false::q) (true::s).
-
-Inductive alt_fin (nae1 nae2: bitsNAe): Ensemble (list bool) :=
-  | finL : forall s, In _ (fin nae1) s -> alt_fin nae1 nae2 (true::s)
-  | finR : forall s, In _ (fin nae1) s -> alt_fin nae1 nae2 (false::s).
+  (*[] est l'état initial du nouvelle automate, cette regle ajoute une transition epsilon vers
+    le start du premier automote, prepend de true*)
+  | Next_altNL : alt_next nae1 nae2 None [] (true::start nae1)
+  (*[] est l'état initial du nouvelle automate, cette regle ajoute une transition epsilon vers
+    le start du premier automote, prepend de false*)
+  | Next_altNR : alt_next nae1 nae2 None [] (false::start nae2)
+  (*Si l'etat initial est de la forme true::q, on renvoie l'ensemble des next a q du 1er automate, pour toute transition a et
+    prepend de true*)
+  | Next_altL : forall a q s, In _ (next nae1 a q) s -> alt_next nae1 nae2 a (true::q) (true::s)
+  (*Si l'état initial est de la forme true::q, on renvoie l'ensemble des next a q du 2nd automate, pour toute transition a et
+    prepend de false*)
+  | Next_altR : forall a q s, In _ (next nae2 a q) s -> alt_next nae1 nae2 a (false::q) (true::s).
 
 Definition alt (nae1: bitsNAe) (nae2: bitsNAe): bitsNAe :=
   let start1 := start nae1 in
@@ -158,9 +210,63 @@ Definition alt (nae1: bitsNAe) (nae2: bitsNAe): bitsNAe :=
   mkNfa
     ([])
     (alt_next nae1 nae2)
-    (alt_fin nae1 nae2).
+    (*L'union des fin, avec les états du 1er automate, prepend de true
+      et les états du 2nd automate prepend de false*)
+    (Union _ (prepend_list_set true (fin nae1)) (prepend_list_set false (fin nae2))).
 
-(*Definition conc (nae1: bitsNAe) (nae2: bitsNAe): bitsNAe :=
+(*concaténation de deux automates*)
+Inductive conc_next (nae1 nae2: bitsNAe): option A -> list bool -> Ensemble (list bool) :=
+  (*Si l'etat initial est de la forme true::q, on renvoie l'ensemble des next a q du 1er automate, pour toute transition a et
+    prepend de true*)
+  | Next_concL : forall oa q s, next nae1 oa q s -> conc_next nae1 nae2 oa (true::q) (true::s)
+  (*Lorsque l'on arrive a la fin du premier automate (l'etat s prepend de true), on fait une epsilon transition vers le start du second prepend de false*)
+  | Next_concFL : forall oa s, fin nae1 s -> conc_next nae1 nae2 oa (true::s) (false::start nae2)
+  (*Si l'etat initial est de la forme false::q, on renvoie l'ensemble des next a q du 2nd automate, pour toute transition a et
+    prepend de true*)
+  | Next_concR : forall oa q s, next nae2 oa q s -> conc_next nae1 nae2 oa (false::q) (false::s).
+
+Definition conc (nae1: bitsNAe) (nae2: bitsNAe): bitsNAe :=
+  let start1 := start nae1 in
+  let start2 := start nae2 in
+
+  let next1 := next nae1 in
+  let next2 := next nae2 in
+
+  let fin1 := fin nae1 in
+  let fin2 := fin nae2 in
+
+  mkNfa
+    (true::start1)
+    (conc_next nae1 nae2)
+    (*Les états finaux sont ceux de fin2 prepend de false*)
+    (prepend_list_set false fin2).
+
+(*Le star de l'automate, on ajoute un état inital []*)
+Inductive star_next (nae1: bitsNAe): option A -> list bool -> Ensemble (list bool) :=
+  (*transition depuis l'etat inital vers le start de l'automate, prepend de true*)
+  | Next_starSN : star_next nae1 None [] (true::start nae1)
+  (*transition depsuis un des états finaux vers l'état inital de l'automate*)
+  | Next_starN : forall s, fin nae1 s -> star_next nae1 None (true::s) (true::start nae1)
+  (*Si l'etat initial est de la forme true::q, on renvoie l'ensemble des next a q de l'automate, pour toute transition a et
+    prepend de true*)
+  | Next_star : forall oa s q, next nae1 oa s q -> star_next nae1 oa (true::s) (true::q).
+
+Definition star (nae1: bitsNAe): bitsNAe :=
+  let start1 := start nae1 in
+
+  let next1 := next nae1 in
+
+  let fin1 := fin nae1 in
+
+  mkNfa
+    ([])
+    (star_next nae1)
+    (*tout les états finaux de l'autamate, prepend de true plus [], le nouvelle état initial*)
+    (Add _ (prepend_list_set true fin1) []).
+
+(*
+  Exemple de definition utilisé avant, plus dur de prouver avec
+  Definition conc (nae1: bitsNAe) (nae2: bitsNAe): bitsNAe :=
   let start1 := start nae1 in
   let start2 := start nae2 in
 
@@ -178,7 +284,7 @@ Definition alt (nae1: bitsNAe) (nae2: bitsNAe): bitsNAe :=
       | true::q => prepend_list_set true (next1 t q)
       | false::q => prepend_list_set false (next2 t q)
       end)
-    (prepend_list_set false fin2).
+    (prepend_list_set false fin2).*)
 
 Fixpoint to_nfae (rexp: rexp A): bitsNAe :=
   match rexp with
@@ -186,8 +292,101 @@ Fixpoint to_nfae (rexp: rexp A): bitsNAe :=
   | Atom a => atom a
   | Alt r1 r2 => alt (to_nfae r1) (to_nfae r2)
   | Conc r1 r2 => conc (to_nfae r1) (to_nfae r2)
-  | Star r => mkNfa ([]) (fun s t => empty_set) (fun s => s = [])
-  end.*)
+  | Star r => star (to_nfae r)
+  end.
+
+Lemma fin_atom : forall a q, fin (atom a) q <-> (q = [false]).
+Proof.
+  intros a q.
+  simpl.
+  split; intro H.
+  inversion H; reflexivity.
+  rewrite H.
+  apply In_singleton.
+Qed.
+
+Lemma start_atom: forall a, start (atom a) = [true].
+Proof.
+  intro a.
+  simpl.
+  reflexivity.
+Qed.
+
+Lemma eps_atom: forall a, eps (atom a) = Empty_set _.
+Proof.
+  intro a.
+  unfold eps.
+  apply Extensionality_Ensembles; split; intros x H.
+  *inversion_clear H.
+  inversion_clear H0.
+  *inversion_clear H.
+Qed.
+
+Lemma in_step_atom_Some: forall a b p q, step (atom a) (Some b) (p, q) <-> (p = [true] /\ q = [false] /\ b = a).
+Proof.
+  intros a b p q.
+  split; intro H.
+  inversion_clear H.
+  inversion_clear H0.
+  tauto.
+  apply In_step.
+  destruct H.
+  destruct H0.
+  rewrite H.
+  rewrite H0.
+  rewrite H1.
+  apply Next_atomA.
+Qed.
+
+Lemma False_False_in_steps_atom: forall a w,  steps_nae (atom a) w ([false], [false]) <-> (w = []).
+Proof.
+  intros a w.
+  induction w; split; intro H.
+  *reflexivity.
+  *apply In_steps_nil.
+  apply rtrancl_refl.
+  *inversion_clear H.
+  inversion_clear H0.
+  inversion_clear H.
+  inversion_clear H2.
+  destruct H.
+  inversion H0.
+  inversion H3.
+  inversion_clear H4.
+  inversion H5.
+  *inversion H.
+Qed.
+
+Lemma start_fin_in_steps_atom : forall a w, steps_nae (atom a) w (start (atom a), [false]) <-> (w = [a]).
+Proof.
+  intros a w.
+  induction w; split; intro H.
+  *inversion H.
+  inversion H2.
+  inversion H5.
+  inversion H6.
+  inversion H8.
+  *inversion H.
+  *inversion_clear H.
+  inversion_clear H0.
+  inversion_clear H.
+  inversion_clear H2.
+  inversion H.
+  rewrite <- H4 in H1.
+  apply False_False_in_steps_atom in H1.
+  rewrite H1.
+  reflexivity.
+  *apply In_steps_cons.
+  inversion H.
+  simpl.
+  apply In_compose with [false].
+  apply In_compose with [true].
+  apply rtrancl_refl.
+  apply In_step.
+  apply Next_atomA.
+  apply False_False_in_steps_atom.
+  reflexivity.
+Qed.
 
 End BitsNAe.
 
@@ -210,12 +409,10 @@ Lemma acc_nfae1 : accepts_eps nfae1 [1].
   apply rtrancl_refl.
   apply In_step.
   compute.
-  apply nextA.
+  apply Next_atomA.
   apply In_steps_nil.
   apply rtrancl_refl.
 Qed.
-
-Definition nfae2 := alt (atom 1) (atom 2).
 
 Variable A: Type.
 
@@ -239,196 +436,6 @@ Proof.
   intros na a p q H.
   inversion_clear H.
   assumption.
-Qed.
-
-(*Bon ça prouve le goal suivant mais ça à l'air faux quand meme hein*)
-Lemma rtrancl_imp_step :
-  forall (na : bitsNAe A) (a : option A) (p q : list bool),
-    rtrancl (step na a) (p, q) -> step na a (p, q).
-Admitted.
-
-Goal forall nae1 nae2: bitsNAe A, accepts_eps nae1 [] -> accepts_eps (alt nae1 nae2) [].
-intros nae1 nae2 H.
-induction H.
-destruct H as (H, H').
-unfold accepts_eps.
-exists (true::x).
-split.
-apply finL.
-assumption.
-simpl.
-Print In_steps_nil.
-apply In_steps_nil.
-unfold eps.
-inversion_clear H'.
-Print rtrancl.
-apply rtrancl_trans with (b := true::start nae1).
-apply rtrancl_base.
-apply In_step.
-simpl.
-apply nextNL.
-apply rtrancl_base.
-apply In_step.
-Print nextL.
-simpl.
-apply nextL.
-induction H0.
-Admitted.
-
-Goal forall (nae1 nae2 : bitsNAe A),
-  next (alt nae1 nae2) None [] (true::start nae1).
-Proof.
-  intros nae1 nae2.
-  apply nextNL.
-Qed.
-
-Goal forall h q (nae1 nae2: bitsNAe A), ((accepts_eps nae1 q) -> accepts_eps (alt nae1 nae2) q) -> accepts_eps nae1 (h::q) -> accepts_eps (alt nae1 nae2) (h::q).
-Proof.
-  intros h q nae1 nae2 IH H.
-  induction H.
-  destruct H as (H, H').
-  exists (true::x).
-  split.
-  * apply finL.
-  assumption.
-  * simpl.
-  inversion_clear H'.
-  apply In_steps_cons with (sb := true::sb) (sc := true::sc).
-  apply rtrancl_trans with (true::start nae1).
-  apply rtrancl_base.
-  apply In_step.
-  apply nextNL.
-  apply rtrancl_base.
-  apply In_step.
-  apply nextL.
-  
-Qed.
-
-Goal forall nae1 nae2: bitsNAe A, accepts_eps nae1 [] -> accepts_eps (alt nae1 nae2) [].
-  intros nae1 nae2 H.
-  inversion H as (x, H').
-  destruct H' as (H', H'').
-  inversion_clear H''.
-  unfold accepts_eps.
-  exists (true::x).
-  split; simpl; try apply finL; try assumption.
-  apply In_steps_nil.
-  apply rtrancl_intro_rtrancl with (b := true::start nae1); try apply rtrancl_refl.
-  apply rtrancl_intro_rtrancl with (b := []); try apply rtrancl_refl.
-  apply In_step.
-  apply nextNL.
-  unfold eps.
-  apply In_step.
-  apply nextL.
-  apply step_imp_next.
-  induction H0.
-  assumption.
-Qed.
-
-Goal forall (w : list A) (nae1 nae2 : bitsNAe A),
-        accepts_eps nae1 w -> accepts_eps (alt nae1 nae2) w.
-  intros w nae1 nae2.
-  induction 1.
-  destruct H as (H, H').
-  unfold accepts_eps.
-  exists (true::x).
-  split.
-  *
-    simpl.
-    apply finL.
-    assumption.
-  *
-  induction w.
-  **
-    apply In_steps_nil.
-    simpl.
-    Print rtrancl.
-    apply rtrancl_intro_rtrancl with (b := true::start nae1).
-    ***
-      apply rtrancl_intro_rtrancl with (b := []); try apply rtrancl_refl.
-      unfold eps.
-      apply In_step.
-      simpl.
-      unfold In.
-      Print alt_next.
-      apply nextNL.
-    ***
-    unfold eps.
-    apply In_step.
-    simpl.
-    Print alt_next.
-Qed.
-
-(*Blocage....*)
-Goal forall (w : list A) (nae1 nae2 : bitsNAe A),
-        accepts_eps nae1 w -> accepts_eps nae2 w -> accepts_eps (alt nae1 nae2) w.
-
-  unfold accepts_eps.
-  intros w nae1 nae2 H H'.
-  simpl.
-  apply acc_none with (e := (false::(start nae2))).
-  *
-    unfold In.
-    simpl.
-    apply nextNR.
-  *
-  Print accepts_eps_from.
-  induction w.
-  
-
-
-Goal accepts_eps nfae2 [1].
-  Print acc_cons.
-  apply acc_none with (e := [true; true]).
-  unfold In.
-  simpl.
-  Print nextNL.
-  apply nextNL.
-  Print accepts_eps_from.
-  apply acc_cons with (e := .
-
-Goal forall x : nat, accepts (to_nfae (Atom x)) [Some x].
-  intro x.
-  compute.
-  exists [false].
-  tauto.
-
-Goal accepts nfae1 [Some 1].
-Proof.
-  compute.
-  exists [false].
-  tauto.
-Qed.
-
-Goal accepts nfae1 = L rexp1.
-
-Definition rexp2 := Conc (Atom 1) (Atom 2).
-Definition nfae2 := to_nfae rexp2.
-
-Goal accepts nfae2 [Some 1; Some 3].
-Proof.
-  unfold accepts.
-  simpl.
-  unfold prepend_list_set.
-  exists [true; false].
-  split.
-  tauto.
-  exists [false; false].
-  split; tauto.
-Qed.
-
-Definition rexp3 := Alt (Atom 1) (Atom 2).
-Definition nfae3 := to_nfae rexp3.
-
-Goal accepts nfae3 [Some ] /\ accepts nfae3 [Some 2].
-Proof.
-  split; compute.
-  *
-  exists [true; false].
-  split.
-  intro.
-  discriminate H.
-  reflexivity.
 Qed.
 
 End Test.

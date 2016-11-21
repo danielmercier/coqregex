@@ -27,8 +27,12 @@ Definition langEps : lang := Singleton _ nil.
 Definition lang0 : lang := Empty_set _.
 Definition langAtom (a : A) := Singleton _ [a].
 
+(*Le star d'un langage*)
 Inductive star (L : lang) : lang :=
+  (*On reconnait par défault le mot vide*)
   | In_star_nil : star L nil
+  (*Sinon, une partie de la liste doit etre reconnu par L et l'autre par
+  star de L*)
   | In_star_cons : forall wb we : list A, L wb -> star L we -> star L (wb ++ we).
 
 Lemma NilI: star l nil.
@@ -39,9 +43,6 @@ Lemma LConsI: l wb -> star l we -> star l (wb ++ we).
   apply In_star_cons.
 Qed.
 
-Require Import ListSet.
-
-(* star lang0 = lang0 *)
 Lemma epsilonExists: star langEps = langEps.
   apply Extensionality_Ensembles.
   split.
@@ -78,7 +79,9 @@ Lemma epsilon'': star (star (star langEps)) = langEps.
   reflexivity.
 Qed.
 
+(*La concaténation de deux langages*)
 Inductive conc (l1 l2 : lang): lang :=
+  (*une partie de la liste est reconnu par l1 et l'autre par l2*)
   | In_conc : forall wb we, l1 wb -> l2 we -> conc l1 l2 (wb ++ we).
 
 Fixpoint L (r : rexp A): lang :=
