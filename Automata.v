@@ -296,7 +296,8 @@ Goal accepts nfa1 [0].
   split.
   apply In_singleton.
   unfold In.
-  apply In_steps_cons with (sb := 1).
+  apply In_steps_cons.
+  apply In_compose with 1.
   apply In_step.
   simpl.
   apply next001.
@@ -308,10 +309,12 @@ Goal accepts nfa1 [0; 1].
   exists 1.
   split.
   apply In_singleton.
-  apply In_steps_cons with (sb := 1).
+  apply In_steps_cons.
+  apply In_compose with 1.
   apply In_step.
   apply next001.
-  apply In_steps_cons with (sb := 1).
+  apply In_steps_cons.
+  apply In_compose with 1.
   apply In_step.
   apply next111.
   apply In_steps_nil.

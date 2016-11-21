@@ -18,19 +18,37 @@ Definition eps (nae : nae) := step nae None.
 
 (*Cloture reflexive transitive*)
 Inductive rtrancl (T: Type) (ens : Ensemble (T * T)) : Ensemble (T * T) :=
-  | rtrancl_base : forall a b, In _ ens (a, b) -> rtrancl ens (a, b)
   | rtrancl_refl : forall s, rtrancl ens (s, s)
-  | rtrancl_trans : forall a b c, rtrancl ens (a, b) -> rtrancl ens (b, c) -> rtrancl ens (a, c).
+  | rtrancl_trans : forall a b c, rtrancl ens (a, b) -> ens (b, c) -> rtrancl ens (a, c).
+
+Lemma rtrancl_base (T: Type) : forall (ens : Ensemble (T * T)) x y, ens (x, y) -> rtrancl ens (x, y).
+Proof.
+  intros ens x y.
+  intro H.
+  apply rtrancl_trans with x.
+  apply rtrancl_refl.
+  assumption.
+Qed.
+
+Lemma ens_trans_rtrancl (T: Type) : forall (ens : Ensemble (T * T)) a b c, ens (a, b) -> rtrancl ens (b, c) -> rtrancl ens (a, c).
+Proof.
+  intros ens a b c.
+  intros H H'.
+Admitted.
+
+Lemma rtrancl_trans_rtrancl (T: Type) :
+  forall (ens : Ensemble (T * T)) a b c, rtrancl ens (a, b) -> rtrancl ens (b, c) -> rtrancl ens (a, c).
+Proof.
+  intros ens a b c.
+Admitted.
 
 (*On utilise steps car mieux pour raisonner après, blocage avec l'autre version de accepts_eps_from*)
 Inductive steps_nae nae : list A -> Ensemble (S * S) :=
   | In_steps_nil : forall p q, rtrancl (eps nae) (p, q) -> steps_nae nae [] (p, q)
   | In_steps_cons :
-      forall h q sa sb sc sd,
-        rtrancl (eps nae) (sa, sb) ->
-        step nae (Some h) (sb, sc) ->
-        steps_nae nae q (sc, sd) ->
-          steps_nae nae (h::q) (sa, sd).
+      forall h q sa sd,
+        compose (compose (rtrancl (eps nae)) (step nae (Some h))) (steps_nae nae q) (sa, sd) ->
+        steps_nae nae (h::q) (sa, sd).
 
 Inductive accepts_eps_from (nae: nae) (s: S) : list A -> Prop :=
   | acc_nil : In _ (fin nae) s -> accepts_eps_from nae s []
@@ -39,6 +57,57 @@ Inductive accepts_eps_from (nae: nae) (s: S) : list A -> Prop :=
 
 Definition accepts_eps nae w : Prop :=
   exists k, In _ (fin nae) k /\ In _ (steps_nae nae w) (start nae, k).
+
+Lemma steps_epsclosure : forall nae w, compose (rtrancl (eps nae)) (steps_nae nae w) = steps_nae nae w.
+Proof.
+  intros nae w.
+  destruct w; apply Extensionality_Ensembles.
+  *split; intros (x, y) H.
+    +inversion_clear H.
+    inversion_clear H1.
+    apply In_steps_nil.
+    apply rtrancl_trans_rtrancl with b; assumption.
+    +inversion_clear H.
+    apply In_compose with x.
+    apply rtrancl_refl.
+    apply In_steps_nil.
+    assumption.
+  *split; intros (x, y) H.
+    +inversion_clear H.
+    apply In_steps_cons.
+    inversion_clear H1.
+    rewrite compose_assoc in H.
+    inversion_clear H.
+    rewrite compose_assoc.
+    apply In_compose with b0.
+    apply rtrancl_trans_rtrancl with b; assumption.
+    assumption.
+    +inversion_clear H.
+    inversion_clear H0.
+    inversion_clear H.
+    apply In_compose with b0.
+    assumption.
+    apply In_steps_cons.
+    apply In_compose with b.
+    apply In_compose with b0.
+    apply rtrancl_refl.
+    assumption.
+    assumption.
+Qed.
+
+Lemma in_steps_epsclosure : forall nae p q r w, rtrancl (eps nae) (p, q) -> steps_nae nae w (q, r) -> steps_nae nae w (p, r).
+Proof.
+  intros nae p q r w.
+  intros H H'.
+  rewrite <- steps_epsclosure.
+  apply In_compose with q; assumption.
+Qed.
+
+Lemma epsclosure_steps: forall nae w, compose (steps_nae nae w) (rtrancl (eps nae)) = steps_nae nae w.
+Proof.
+  intros nae w.
+  
+Qed.
 
 End Nae.
 
@@ -135,7 +204,9 @@ Lemma acc_nfae1 : accepts_eps nfae1 [1].
   unfold In.
   Print steps_nae.
   simpl.
-  apply In_steps_cons with (sb := [true]) (sc := [false]).
+  apply In_steps_cons.
+  apply In_compose with [false].
+  apply In_compose with [true].
   apply rtrancl_refl.
   apply In_step.
   compute.
